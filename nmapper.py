@@ -26,6 +26,7 @@ import re
 from itertools import groupby, count
 from pathlib import Path
 from sortedcontainers import SortedDict, SortedSet
+from time import strftime, gmtime
 from typing import Iterable, List, Mapping, TypeVar, TypedDict
 
 PathT = TypeVar('PathT', Path, None)
@@ -101,6 +102,39 @@ def gen_cli(parsed: OpenPortsHost, nmap_cli: str=None) -> List[str]:
     return commands
 
 
+def gen_axiom(parsed: OpenPortsHost, module: str, args: str) -> str:
+    filename = strftime("%Y%m%d_%H%M%S_axiominput.txt", gmtime())
+    with Path(filename).open("w") as f:
+        for host in parsed.keys():
+            f.write(host + '\n')
+
+    all_tcp = SortedSet()
+    all_udp = SortedSet()
+
+    for _, ports_dict in parsed.items():
+        all_tcp = all_tcp.union(ports_dict["tcp"])
+        all_udp = all_udp.union(ports_dict["udp"])
+
+    ports = ""
+
+    if len(all_tcp) > 0:
+        ports += "T:" + _make_ranges(all_tcp)
+    if len(all_udp) > 0:
+        if len(ports) > 0:
+            ports += ","
+        ports += "U:" + _make_ranges(all_udp)
+
+
+    if args is None:
+        args = "-A"
+        if len(all_tcp) > 0:
+            args += " -sS"
+        if len(all_udp) > 0:
+            args += " -sU"
+
+    return f"axiom-scan {filename} -m {module} -p{ports} {args}"
+
+
 def _as_range(iterable: Iterable) -> str:
     l = list(iterable)
     if len(l) > 1:
@@ -130,6 +164,21 @@ def main():
         help="Specify nmap command to use",
         )
     parser.add_argument(
+        "--axiom",
+        action="store_true",
+        help="Create file and output command for axiom-scan"
+        )
+    parser.add_argument(
+        "--axiom-module",
+        help="Specify the module for axiom-scan (default: %(default)s)"
+            " (implies --axiom)",
+        default="nmap",
+        )
+    parser.add_argument(
+        "--axiom-args",
+        help="Specify args for axiom-scan (implies --axiom)",
+        )
+    parser.add_argument(
         "file",
         help="File to parse from",
         type=Path,
@@ -137,13 +186,20 @@ def main():
 
     args = parser.parse_args()
 
+    if args.axiom_module is not None or args.axiom_args is not None:
+        args.axiom = True
+
     parsed = None
 
     if args.format == "masscan":
         parsed = parse_masscan(args.file)
 
 
-    for cmd in gen_cli(parsed, args.nmap_cli):
+    if not args.axiom:
+        for cmd in gen_cli(parsed, args.nmap_cli):
+            print(cmd)
+    else:
+        cmd = gen_axiom(parsed, args.axiom_module, args.axiom_args)
         print(cmd)
 
 
