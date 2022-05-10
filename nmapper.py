@@ -50,7 +50,7 @@ def parse_masscan(path: PathT) -> OpenPortsHost:
     if not path.is_file():
         raise ValueError("path is not a valid file")
 
-    regex = re.compile(r"^Host: (?P<ip>[0-9.]+) \(\)\t"
+    regex = re.compile(r".*Host: (?P<ip>[0-9.]+) \(\)\s*"
         r"Ports: (?P<port>[0-9]+)/open/"
         r"(?P<proto>tcp|udp)")
 
